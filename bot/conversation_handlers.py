@@ -41,7 +41,11 @@ def restricted(func):
     async def wrapped(update, context, *args, **kwargs):
         user_id = update.effective_user.id
         if user_id != int(os.getenv("AUTHORIZED_USER")):
-            print(f"Unauthorized access denied for {user_id}.")
+            logger.info(f"Unauthorized access denied for {user_id}.")
+            await update.message.reply_text(
+                text="This is my persoanl GeminiBot, to run your own Bot look at:\n`https://github.com/sudoAlireza/GeminiBot`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
             return
         return await func(update, context, *args, **kwargs)
 

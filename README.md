@@ -63,6 +63,7 @@ python main.py
 
 
 - [ ] **Removing Specific Conversation from History**
+- [ ] **Add Conversation Feature to Images Part**
 
 
 ## Documentation

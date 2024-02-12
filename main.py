@@ -53,7 +53,7 @@ def states():
                 pattern="^New_Conversation$",
             ),
             CallbackQueryHandler(
-                lambda update, context: start_image_conversation(update, context, conn),
+                lambda update, context: start_image_conversation(update, context),
                 pattern="^Image_Description$",
             ),
             CallbackQueryHandler(

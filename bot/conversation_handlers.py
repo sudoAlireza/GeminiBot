@@ -90,7 +90,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
         conversation_id = context.user_data.get("conversation_id")
         gemini_chat: GeminiChat = context.user_data.get("gemini_chat")
 
-        if gemini_chat:
+        if gemini_chat or conversation_id:
             if "_SAVE" in query.data:
                 conversation_history = gemini_chat.get_chat_history()
                 conversation_title = gemini_chat.get_chat_title()
@@ -115,6 +115,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
             logger.info("No active chat to close")
 
         gemini_chat = None
+        context.user_data["conversation_id"]
 
     except Exception as e:
         logger.error("Error during conversation handling: %s", e)

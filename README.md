@@ -18,7 +18,7 @@ Before deploying the bot, ensure you have the following:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/sudoFathi/GeminiBot.git
+   git clone https://github.com/sudoAlireza/GeminiBot.git
    ```
 
 2. Navigate to the project directory:

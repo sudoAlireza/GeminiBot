@@ -4,6 +4,8 @@ import logging
 import uuid
 import math
 import pickle
+from functools import wraps
+
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -34,6 +36,19 @@ logger = logging.getLogger(__name__)
 CHOOSING, IMAGE_CHOICE, CONVERSATION, CONVERSATION_HISTORY = range(4)
 
 
+def restricted(func):
+    @wraps(func)
+    async def wrapped(update, context, *args, **kwargs):
+        user_id = update.effective_user.id
+        if user_id != int(os.getenv("AUTHORIZED_USER")):
+            print(f"Unauthorized access denied for {user_id}.")
+            return
+        return await func(update, context, *args, **kwargs)
+
+    return wrapped
+
+
+@restricted
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the conversation with /start command and ask the user for input."""
     query = update.callback_query
@@ -59,6 +74,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return CHOOSING
 
 
+@restricted
 async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -> int:
     """Start the conversation with button and ask the user for input."""
     query = update.callback_query
@@ -119,6 +135,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
     return CHOOSING
 
 
+@restricted
 async def start_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to start conversation by writing any message."""
     query = update.callback_query
@@ -140,6 +157,7 @@ async def start_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return CONVERSATION
 
 
+@restricted
 async def reply_and_new_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
@@ -208,6 +226,7 @@ async def reply_and_new_message(
     return CONVERSATION
 
 
+@restricted
 async def get_conversation_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE, conn
 ) -> int:
@@ -237,6 +256,7 @@ async def get_conversation_handler(
     return CHOOSING
 
 
+@restricted
 async def start_image_conversation(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
@@ -255,6 +275,7 @@ async def start_image_conversation(
     return IMAGE_CHOICE
 
 
+@restricted
 async def generate_text_from_image(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
@@ -312,6 +333,7 @@ async def generate_text_from_image(
     return CHOOSING
 
 
+@restricted
 async def get_conversation_history(
     update: Update, context: ContextTypes.DEFAULT_TYPE, conn
 ) -> int:
@@ -348,6 +370,7 @@ async def get_conversation_history(
     return CONVERSATION_HISTORY
 
 
+@restricted
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End the conversation."""
     # To-Do: Remove this handler and handle ending with start and start_over handlers

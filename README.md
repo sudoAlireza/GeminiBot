@@ -11,6 +11,7 @@ Before deploying the bot, ensure you have the following:
 - Python 3.10 installed on your system
 - Obtain a [Telegram API token](https://core.telegram.org/bots) from BotFather
 - Acquire a [Gemini API key](https://makersuite.google.com/app/apikey) from the Google Gemini website
+- Get your Telegram Account id from [Show Json Bot](https://t.me/ShowJsonBot). Account id is different than Account username and you should set it in `.env` file to restrict GeminiBot to your account.
 
 ### Installation
 
@@ -39,6 +40,7 @@ Before deploying the bot, ensure you have the following:
    ```dotenv
    TELEGRAM_BOT_TOKEN=<Your Telegram Bot Token>
    GEMINI_API_TOKEN=<Your Gemini API key>
+   AUTHORIZED_USERS=<Your Telegram account ID number>
    ```
 
 2. Update the `safety_settings.json` file with appropriate safety settings for Gemini policies.

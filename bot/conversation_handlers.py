@@ -127,7 +127,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
         ],
         [InlineKeyboardButton("Image Description", callback_data="Image_Description")],
         [InlineKeyboardButton("Chat History", callback_data="PAGE#1")],
-        [InlineKeyboardButton("Start_Again", callback_data="Start_Again")],
+        [InlineKeyboardButton("Start Again", callback_data="Start_Again")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await context.bot.send_message(
@@ -295,8 +295,6 @@ async def generate_text_from_image(
         reply_markup=reply_markup,
     )
 
-    gemini_chat = GeminiChat(gemini_token=os.getenv("GEMINI_API_TOKEN"))
-
     photo_file = await update.message.photo[-1].get_file()
     buf = io.BytesIO()
     await photo_file.download_to_memory(buf)
@@ -305,12 +303,17 @@ async def generate_text_from_image(
 
     image = PIL.Image.open(buf)
 
+    gemini_image_chat = GeminiChat(
+        gemini_token=os.getenv("GEMINI_API_TOKEN"), image=image
+    )
+
     try:
-        response = (
-            gemini_chat.send_image(update.message.caption)
+        response = response = (
+            gemini_image_chat.send_image(update.message.caption)
             .encode("utf-8")
             .decode("utf-8", "ignore")
         )
+
         if not response:
             raise Exception("Empty response from Gemini")
     except Exception as e:
@@ -324,14 +327,23 @@ async def generate_text_from_image(
     keyboard = [[InlineKeyboardButton("Back to menu", callback_data="Start_Again")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await context.bot.send_message(
-        text=response,
-        parse_mode="Markdown",
-        reply_markup=reply_markup,
-        chat_id=update.message.chat_id,
-        message_id=msg.message_id,
-    )
-    await context.bot.delete_message(chat_id=msg.chat_id, message_id=msg.id)
+    try:
+        await context.bot.send_message(
+            text=response,
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
+            chat_id=update.message.chat_id,
+        )
+        await context.bot.delete_message(chat_id=msg.chat_id, message_id=msg.id)
+
+    except Exception as e:
+        await context.bot.send_message(
+            text=strip_markdown(response),
+            reply_markup=reply_markup,
+            chat_id=update.message.chat_id,
+        )
+        await context.bot.delete_message(chat_id=msg.chat_id, message_id=msg.id)
+        logging.warning(__name__, e)
 
     return CHOOSING
 

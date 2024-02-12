@@ -295,8 +295,7 @@ async def generate_text_from_image(
         reply_markup=reply_markup,
     )
 
-    user_data = context.user_data
-    gemini_chat: GeminiChat = user_data["gemini_chat"]
+    gemini_chat = GeminiChat(gemini_token=os.getenv("GEMINI_API_TOKEN"))
 
     photo_file = await update.message.photo[-1].get_file()
     buf = io.BytesIO()

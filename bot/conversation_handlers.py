@@ -115,6 +115,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
             logger.info("No active chat to close")
 
         gemini_chat = None
+        context.user_data["gemini_chat"] = None
         context.user_data["conversation_id"] = None
 
     except Exception as e:
@@ -188,9 +189,8 @@ async def reply_and_new_message(
             conversation_history = pickle.load(fp)
 
     gemini_chat = context.user_data.get("gemini_chat")
-
     if not gemini_chat:
-
+        logger.info("Creating new conversation instance")
         gemini_chat = GeminiChat(
             gemini_token=os.getenv("GEMINI_API_TOKEN"),
             chat_history=conversation_history,

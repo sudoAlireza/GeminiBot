@@ -91,4 +91,5 @@ class GeminiChat:
     def close(self) -> None:
         """Closes the chat and cleans history."""
         logging.info("Closed model instance")
+        self.chat = None
         self.chat_history = []

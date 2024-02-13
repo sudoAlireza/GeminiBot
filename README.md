@@ -2,6 +2,7 @@
 
 GeminiBot is a Telegram bot tailored to chat with Google's Gemini AI chatbot. Leveraging the official Gemini Bot on the Telegram platform, it engages users in dynamic conversations.
 
+
 ## Getting Started
 
 ### Prerequisites
@@ -59,11 +60,13 @@ python main.py
 - Maintain conversation history for continuing or initiating new discussions
 - Send images with captions to receive responses based on the image content. For example, the bot can read text within images and convert it to text.
 
-## To-Do
 
+## To-Do
 
 - [ ] **Removing Specific Conversation from History**
 - [ ] **Add Conversation Feature to Images Part**
+- [ ] **Handle Long Responses in Multiple Messages**
+- [ ] **Add Tests and Easy Deployment**
 
 
 ## Documentation

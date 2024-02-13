@@ -187,10 +187,15 @@ async def reply_and_new_message(
         with open(f"./pickles/{conv_id}.pickle", "rb") as fp:
             conversation_history = pickle.load(fp)
 
-    gemini_chat = GeminiChat(
-        gemini_token=os.getenv("GEMINI_API_TOKEN"), chat_history=conversation_history
-    )
-    gemini_chat.start_chat()
+    gemini_chat = context.user_data.get("gemini_chat")
+
+    if not gemini_chat:
+
+        gemini_chat = GeminiChat(
+            gemini_token=os.getenv("GEMINI_API_TOKEN"),
+            chat_history=conversation_history,
+        )
+        gemini_chat.start_chat()
 
     response = gemini_chat.send_message(text).encode("utf-8").decode("utf-8", "ignore")
 

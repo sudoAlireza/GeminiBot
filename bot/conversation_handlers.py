@@ -96,6 +96,9 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
                 conversation_title = gemini_chat.get_chat_title()
 
                 conversation_id = conversation_id or f"conv{uuid.uuid4().hex[:6]}"
+                with open(f"./pickles/{conversation_id}.pickle", "wb") as fp:
+                    pickle.dump(conversation_history, fp)
+
                 conv = (
                     conversation_id,
                     user_id,
@@ -103,9 +106,6 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
                 )
                 create_conversation(conn, conv)
                 logger.info(f"conversation {conversation_id} saved in db and closed")
-
-                with open(f"./pickles/{conversation_id}.pickle", "wb") as fp:
-                    pickle.dump(conversation_history, fp)
 
             else:
                 logger.info(f"conversation {conversation_id} closed without saving")

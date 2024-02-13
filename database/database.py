@@ -45,7 +45,7 @@ def create_conversation(conn, conversation):
     :param conversation:
     :return: conversation id
     """
-    sql = """ INSERT INTO conversations(conv_id,user_id,title)
+    sql = """ INSERT OR IGNORE INTO conversations(conv_id,user_id,title)
               VALUES(?,?,?) """
     cur = conn.cursor()
     cur.execute(sql, conversation)

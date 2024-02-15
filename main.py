@@ -20,6 +20,7 @@ from bot.conversation_handlers import (
     generate_text_from_image,
     get_conversation_history,
     get_conversation_handler,
+    delete_conversation_handler,
     done,
 )
 
@@ -85,6 +86,12 @@ def states():
             MessageHandler(
                 filters.Regex("^/conv"),
                 lambda update, context: get_conversation_handler(update, context, conn),
+            ),
+            CallbackQueryHandler(
+                lambda update, context: delete_conversation_handler(
+                    update, context, conn
+                ),
+                pattern="^Delete_Conversation$",
             ),
         ],
     }

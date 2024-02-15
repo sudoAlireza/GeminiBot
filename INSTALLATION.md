@@ -16,10 +16,7 @@ Throughout this story, I'll try to explain of utilizing GeminiBot's repository, 
 * Maintain conversation history for continuing or initiating new discussions
 * Send images with captions to receive responses based on the image content. For example, the bot can read text within images and convert it to text.
 
-##
-<p align="center" width="100%">
-<img alt="Bot Preview" src="./assets/preview.gif"/>
-</p>
+https://github.com/sudoAlireza/GeminiBot/assets/87416117/beeb0fd2-73c6-4631-baea-2e3e3eeb9319
 
 ## Project Structure
 

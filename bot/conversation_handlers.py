@@ -44,7 +44,7 @@ def restricted(func):
         if user_id != int(os.getenv("AUTHORIZED_USER")):
             logger.info(f"Unauthorized access denied for {user_id}.")
             await update.message.reply_animation(
-                "https://raw.githubusercontent.com/sudoAlireza/GeminiBot/master/assets/preview.gif",
+                "https://github.com/sudoAlireza/GeminiBot/assets/87416117/beeb0fd2-73c6-4631-baea-2e3e3eeb9319",
                 caption="This is my persoanl GeminiBot, to run your own Bot look at:\nhttps://github.com/sudoAlireza/GeminiBot",
             )
             return

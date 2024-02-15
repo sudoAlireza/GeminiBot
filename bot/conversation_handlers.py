@@ -166,7 +166,6 @@ async def start_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     keyboard = [[InlineKeyboardButton("Return to menu", callback_data="Start_Again")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     msg = await query.edit_message_text(
-        query.message.chat.id,
         text=message_content,
         reply_markup=reply_markup,
     )

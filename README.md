@@ -15,9 +15,11 @@ Before deploying the bot, ensure you have the following:
 - Get your Telegram Account id from [Show Json Bot](https://t.me/ShowJsonBot). Account id is different than Account username and you should set it in `.env` file to restrict GeminiBot to your account.
 
 ##
-<p align="center" width="100%">
-<img alt="Bot Preview" src="./assets/preview.gif"/>
-</p>
+
+
+https://github.com/sudoAlireza/GeminiBot/assets/87416117/beeb0fd2-73c6-4631-baea-2e3e3eeb9319
+
+
 
 ### Installation
 

@@ -68,7 +68,7 @@ python main.py
 
 ## To-Do
 
-- [ ] **Removing Specific Conversation from History**
+- [x] **Removing Specific Conversation from History**
 - [ ] **Add Conversation Feature to Images Part**
 - [ ] **Handle Long Responses in Multiple Messages**
 - [ ] **Add Tests and Easy Deployment**

@@ -18,6 +18,7 @@ from database.database import (
     get_user_conversation_count,
     select_conversations_by_user,
     select_conversation_by_id,
+    delete_conversation_by_id,
 )
 from helpers.inline_paginator import InlineKeyboardPaginator
 from helpers.helpers import conversations_page_content, strip_markdown
@@ -42,9 +43,9 @@ def restricted(func):
         user_id = update.effective_user.id
         if user_id != int(os.getenv("AUTHORIZED_USER")):
             logger.info(f"Unauthorized access denied for {user_id}.")
-            await update.message.reply_text(
-                text="This is my persoanl GeminiBot, to run your own Bot look at:\n`https://github.com/sudoAlireza/GeminiBot`",
-                parse_mode=ParseMode.MARKDOWN,
+            await update.message.reply_animation(
+                "https://raw.githubusercontent.com/sudoAlireza/GeminiBot/master/assets/preview.gif",
+                caption="This is my persoanl GeminiBot, to run your own Bot look at:\nhttps://github.com/sudoAlireza/GeminiBot",
             )
             return
         return await func(update, context, *args, **kwargs)
@@ -83,6 +84,13 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
     """Start the conversation with button and ask the user for input."""
     query = update.callback_query
     await query.answer()
+
+    prev_message = context.user_data.get("to_delete_message")
+    if prev_message:
+        await context.bot.delete_message(
+            chat_id=prev_message.chat_id, message_id=prev_message.id
+        )
+        context.user_data["to_delete_message"]
 
     try:
         user_details = query.from_user
@@ -132,11 +140,12 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
         [InlineKeyboardButton("Start Again", callback_data="Start_Again")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(
+    msg = await context.bot.send_message(
         query.message.chat.id,
         text="Hi. It's Gemini Chat Bot. You can ask me anything and talk to me about what you want",
         reply_markup=reply_markup,
     )
+    context.user_data["to_delete_message"] = msg
 
     return CHOOSING
 
@@ -145,6 +154,8 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE, conn) -
 async def start_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask the user to start conversation by writing any message."""
     query = update.callback_query
+    await query.answer()
+
     logger.info("Received callback: New_Conversation")
     message_content = "You asked for a conversation. OK, Let's start conversation!"
 
@@ -154,11 +165,12 @@ async def start_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     keyboard = [[InlineKeyboardButton("Return to menu", callback_data="Start_Again")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(
+    msg = await query.edit_message_text(
         query.message.chat.id,
         text=message_content,
         reply_markup=reply_markup,
     )
+    context.user_data["to_delete_message"] = msg
 
     return CONVERSATION
 
@@ -257,11 +269,47 @@ async def get_conversation_handler(
                 "Continue Conversations", callback_data="New_Conversation"
             )
         ],
+        [
+            InlineKeyboardButton(
+                "Delete Conversation", callback_data="Delete_Conversation"
+            )
+        ],
         [InlineKeyboardButton("Back to menu", callback_data="Start_Again")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(text=message_content, reply_markup=reply_markup)
+    msg = await update.message.reply_text(
+        text=message_content, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["to_delete_message"] = msg
+
+    return CONVERSATION_HISTORY
+
+
+@restricted
+async def delete_conversation_handler(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, conn
+) -> int:
+    """Delete conversation if user clicks on Delete button"""
+    query = update.callback_query
+
+    await query.answer()
+
+    conversation_id = context.user_data["conversation_id"]
+    user_details = query.from_user.id
+    conv_specs = (user_details, conversation_id)
+
+    conversation = delete_conversation_by_id(conn, conv_specs)
+
+    keyboard = [[InlineKeyboardButton("Back to menu", callback_data="Start_Again")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    msg = await query.edit_message_text(
+        text="Conversation history deleted successfully. Back to menu Start new Conversation",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    context.user_data["to_delete_message"] = msg
 
     return CHOOSING
 
@@ -277,10 +325,11 @@ async def start_image_conversation(
     keyboard = [[InlineKeyboardButton("Back to menu", callback_data="Start_Again")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
+    msg = await query.edit_message_text(
         f"You asked for Image description. OK, Send your image with caption!",
         reply_markup=reply_markup,
     )
+    context.user_data["to_delete_message"] = msg
 
     return IMAGE_CHOICE
 
@@ -382,11 +431,12 @@ async def get_conversation_history(
         InlineKeyboardButton("Back to menu", callback_data="Start_Again")
     )
 
-    await query.edit_message_text(
+    msg = await query.edit_message_text(
         page_content,
         reply_markup=paginator.markup,
         parse_mode=ParseMode.MARKDOWN,
     )
+    context.user_data["to_delete_message"] = msg
 
     return CONVERSATION_HISTORY
 

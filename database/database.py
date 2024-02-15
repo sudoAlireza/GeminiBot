@@ -115,3 +115,19 @@ def select_conversation_by_id(conn, conversation):
     item = cur.fetchone()
 
     return {"conversation_id": item[0], "title": item[1]}
+
+
+def delete_conversation_by_id(conn, conversation):
+    """
+    Delete conversation by conv_id
+    :param conn: the Connection object
+    :param conversation: (user_id, conv_id):
+    :return:
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM conversations WHERE user_id=? AND conv_id=?;", conversation
+    )
+    conn.commit()
+
+    return

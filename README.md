@@ -2,6 +2,7 @@
 
 GeminiBot is a Telegram bot tailored to chat with Google's Gemini AI chatbot. Leveraging the official Gemini Bot on the Telegram platform, it engages users in dynamic conversations.
 
+[Set-up Tutorial on Medium](https://medium.com/@alirezafathi/how-to-use-google-gemini-ai-in-your-personal-telegram-bot-on-your-own-server-b1f0b9de2bdd)
 
 ## Getting Started
 

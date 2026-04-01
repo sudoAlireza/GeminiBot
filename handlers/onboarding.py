@@ -103,11 +103,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 plan = json.loads(task["plan_json"]) if task.get("plan_json") else []
                 day_item = next((item for item in plan if item["day"] == dl_day_num), None)
                 if day_item:
+                    lesson_context = ""
+                    last_lesson = task.get("last_lesson_text")
+                    if last_lesson and task.get("last_delivered_day") == dl_day_num:
+                        lesson_context = f"\n\nHere is the full lesson that was delivered:\n{last_lesson}\n"
                     sys_instr = (
                         f"You are a knowledgeable tutor helping the user discuss Day {dl_day_num} of their learning plan.\n"
                         f"Topic: {task['prompt']}\n"
                         f"Today's title: {day_item['title']}\n"
-                        f"Today's subject: {day_item['subject']}\n\n"
+                        f"Today's subject: {day_item['subject']}"
+                        f"{lesson_context}\n\n"
                         "Answer questions, provide examples, go deeper into the topic, or clarify concepts. "
                         "Be conversational, helpful, and encourage curiosity."
                     )

@@ -532,6 +532,22 @@ async def m031_task_parent_id(conn):
         pass  # Column already exists
 
 
+@migration
+async def m032_task_last_lesson_text(conn):
+    """v32: Add last_lesson_text to tasks for on-demand quiz generation."""
+    try:
+        await conn.execute("ALTER TABLE tasks ADD COLUMN last_lesson_text TEXT")
+    except Exception:
+        pass  # Column already exists
+
+
+async def update_task_last_lesson_text(pool: DatabasePool, task_id: int, text: str):
+    """Store the most recently delivered lesson text for a task."""
+    await pool.execute(
+        "UPDATE tasks SET last_lesson_text=? WHERE id=?", (text, task_id)
+    )
+
+
 async def _get_schema_version(conn) -> int:
     """Get current schema version, creating the tracking table if needed."""
     await conn.execute("""
@@ -779,7 +795,7 @@ async def mark_task_completed(pool: DatabasePool, task_id: int):
 async def get_task_by_id(pool: DatabasePool, task_id: int):
     """Retrieve a single task by its ID."""
     row = await pool.execute_fetch_one(
-        "SELECT id, user_id, prompt, run_time, interval, plan_json, start_date, hashtag, last_delivered_day, parent_task_id, status FROM tasks WHERE id=?",
+        "SELECT id, user_id, prompt, run_time, interval, plan_json, start_date, hashtag, last_delivered_day, parent_task_id, status, last_lesson_text FROM tasks WHERE id=?",
         (task_id,),
     )
     if row:
@@ -795,6 +811,7 @@ async def get_task_by_id(pool: DatabasePool, task_id: int):
             "last_delivered_day": row["last_delivered_day"] or 0,
             "parent_task_id": row["parent_task_id"],
             "status": row["status"],
+            "last_lesson_text": row["last_lesson_text"],
         }
     return None
 

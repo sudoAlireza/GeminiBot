@@ -21,7 +21,7 @@ from chat.session import ChatSession
 from database.database import (
     create_task, get_user_tasks, get_user, get_user_task_hashtags,
     delete_task_by_hashtag, mark_task_completed, _generate_hashtag, record_token_usage,
-    get_task_by_id, update_task_last_delivered_day,
+    get_task_by_id, update_task_last_delivered_day, update_task_last_lesson_text,
 )
 from helpers.helpers import strip_markdown, split_message
 
@@ -632,12 +632,10 @@ async def _generate_quiz(chat: ChatSession, lesson_text: str) -> list:
     return []
 
 
-async def _generate_task_content(task_id: int, user_id: int, target_prompt: str, pool, user, has_plan: bool = False) -> tuple:
-    """Generate AI content for a task. Returns (response, chat, quiz_data).
+async def _generate_task_content(task_id: int, user_id: int, target_prompt: str, pool, user) -> tuple:
+    """Generate AI content for a task. Returns (response, chat).
 
     Lesson is always generated via one_shot() (plain text, no output limits).
-    When has_plan is True, a second lightweight structured call generates quiz questions.
-    Quiz failure never blocks lesson delivery.
     """
     from database.database import get_user_api_key, get_user_provider_settings
 
@@ -659,7 +657,6 @@ async def _generate_task_content(task_id: int, user_id: int, target_prompt: str,
     # Try generating AI response with retries
     response = None
     chat = None
-    quiz_data = []
     max_retries = 3
     retry_delay = 5
 
@@ -697,14 +694,10 @@ async def _generate_task_content(task_id: int, user_id: int, target_prompt: str,
                 except Exception as fb_err:
                     logger.error(f"Task {task_id}: Gemini fallback also failed: {fb_err}")
 
-    # Generate quiz from lesson content (separate call, never blocks lesson)
-    if has_plan and response and response.text and chat:
-        quiz_data = await _generate_quiz(chat, response.text)
-
-    return response, chat, quiz_data
+    return response, chat
 
 
-async def _send_task_result(task_id, user_id, prompt, response, chat, days_passed, plan_total, task_hashtag, pool, quiz_data=None):
+async def _send_task_result(task_id, user_id, prompt, response, chat, days_passed, plan_total, task_hashtag, pool):
     """Send the generated task content to the user."""
     if response.usage and pool:
         await record_token_usage(
@@ -725,9 +718,11 @@ async def _send_task_result(task_id, user_id, prompt, response, chat, days_passe
     last_markup = None
     bot_username = _application.bot_data.get("bot_username", "")
     buttons = []
-    if days_passed and plan_total and bot_username:
-        discuss_url = f"https://t.me/{bot_username}?start=discuss_{task_id}_{days_passed}"
-        buttons.append(InlineKeyboardButton("💬 Discuss", url=discuss_url))
+    if days_passed and plan_total:
+        buttons.append(InlineKeyboardButton("🧩 Quiz", callback_data=f"TASK_QUIZ#{task_id}_{days_passed}"))
+        if bot_username:
+            discuss_url = f"https://t.me/{bot_username}?start=discuss_{task_id}_{days_passed}"
+            buttons.append(InlineKeyboardButton("💬 Discuss", url=discuss_url))
     if bot_username:
         menu_url = f"https://t.me/{bot_username}?start=menu"
         buttons.append(InlineKeyboardButton("📋 Menu", url=menu_url))
@@ -749,24 +744,6 @@ async def _send_task_result(task_id, user_id, prompt, response, chat, days_passe
         pending = _application.bot_data.setdefault("pending_task_buttons", {})
         pending[user_id] = (last_sent.chat_id, last_sent.message_id)
 
-    # Send quiz polls after the lesson
-    for q in (quiz_data or []):
-        try:
-            options = q.get("options", [])
-            correct = q.get("correct", 0)
-            if len(options) < 2 or correct >= len(options):
-                continue
-            await _application.bot.send_poll(
-                chat_id=user_id,
-                question=q["question"][:300],
-                options=[o[:100] for o in options],
-                type="quiz",
-                correct_option_id=correct,
-                explanation=q.get("explanation", "")[:200],
-                is_anonymous=False,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send quiz poll: {e}")
 
 
 async def _run_task_delivery(task_id, user_id, prompt, plan_json, task_hashtag, pool):
@@ -812,16 +789,17 @@ async def _run_task_delivery(task_id, user_id, prompt, plan_json, task_hashtag, 
         return True
 
     user = await get_user(pool, user_id) if pool else None
-    response, chat, quiz_data = await _generate_task_content(task_id, user_id, target_prompt, pool, user, has_plan=bool(plan_json))
+    response, chat = await _generate_task_content(task_id, user_id, target_prompt, pool, user)
 
     if not response or not response.text:
         return False
 
-    # Success — increment last_delivered_day so next run delivers the next day
+    # Success — increment last_delivered_day and store lesson text for on-demand quiz
     if current_day is not None:
         await update_task_last_delivered_day(pool, task_id, current_day)
+        await update_task_last_lesson_text(pool, task_id, response.text)
 
-    await _send_task_result(task_id, user_id, prompt, response, chat, current_day, plan_total, task_hashtag, pool, quiz_data=quiz_data)
+    await _send_task_result(task_id, user_id, prompt, response, chat, current_day, plan_total, task_hashtag, pool)
     return True
 
 
@@ -940,6 +918,143 @@ async def retry_task_handler(update, context):
         await query.edit_message_text(f"✅ {task_hashtag}{day_info} — content delivered.", parse_mode=ParseMode.MARKDOWN)
     except BadRequest:
         pass
+
+
+async def quiz_task_handler(update, context):
+    """Generate and send quiz on demand when user presses the Quiz button."""
+    query = update.callback_query
+    await query.answer()
+
+    raw = _safe_callback_data(query.data)
+    if raw is None:
+        return
+    try:
+        task_id_str, day_str = raw.split("_", 1)
+        task_id = int(task_id_str)
+        day = int(day_str)
+    except (ValueError, TypeError):
+        return
+
+    if not _application:
+        return
+
+    pool = _application.bot_data.get("db_pool")
+    if not pool:
+        return
+
+    task = await get_task_by_id(pool, task_id)
+    if not task:
+        await query.answer(_("Task not found."), show_alert=True)
+        return
+
+    user_id = task["user_id"]
+    if update.effective_user.id != user_id:
+        await query.answer(_("This is not your task."), show_alert=True)
+        return
+
+    plan_json = task.get("plan_json")
+    if not plan_json:
+        await query.answer(_("No quiz available for this task."), show_alert=True)
+        return
+
+    try:
+        plan = json.loads(plan_json)
+    except Exception:
+        await query.answer(_("No quiz available."), show_alert=True)
+        return
+
+    day_item = next((item for item in plan if item["day"] == day), None)
+    if not day_item:
+        await query.answer(_("Day not found in plan."), show_alert=True)
+        return
+
+    # Remove the Quiz button from the original message (replace with remaining buttons)
+    try:
+        old_markup = query.message.reply_markup
+        if old_markup:
+            new_buttons = [
+                btn for btn in old_markup.inline_keyboard[0]
+                if not (btn.callback_data and btn.callback_data.startswith("TASK_QUIZ#"))
+            ]
+            new_markup = InlineKeyboardMarkup([new_buttons]) if new_buttons else None
+            await query.edit_message_reply_markup(reply_markup=new_markup)
+    except Exception:
+        pass
+
+    # Send loading message
+    loading_msg = await _application.bot.send_message(
+        chat_id=user_id, text="🧩 Generating quiz..."
+    )
+
+    # Use saved lesson text if available (matches the delivered day), else fall back to plan metadata
+    prompt = task["prompt"]
+    last_lesson = task.get("last_lesson_text")
+    last_day = task.get("last_delivered_day", 0)
+    if last_lesson and last_day == day:
+        quiz_context = last_lesson
+    else:
+        quiz_context = (
+            f"Topic: {prompt}\n"
+            f"Day {day} — {day_item['title']}: {day_item['subject']}"
+        )
+
+    # Create chat session and generate quiz
+    from database.database import get_user_api_key, get_user_provider_settings
+
+    user_data = await get_user(pool, user_id)
+    provider_name = user_data.get("active_provider", "gemini") if user_data else "gemini"
+    api_key = None
+    model_name = None
+    if pool:
+        key_row = await get_user_api_key(pool, user_id, provider_name)
+        if key_row and key_row.get("api_key"):
+            api_key = key_row["api_key"]
+        prov_settings = await get_user_provider_settings(pool, user_id, provider_name)
+        if prov_settings and prov_settings.get("model_name"):
+            model_name = prov_settings["model_name"]
+    if not api_key and user_data:
+        api_key = user_data.get("api_key")
+    if not model_name and user_data:
+        model_name = user_data.get("model_name")
+
+    try:
+        chat = ChatSession(provider_name=provider_name, api_key=api_key, model_name=model_name)
+        await chat.start_chat()
+        quiz_data = await _generate_quiz(chat, quiz_context)
+    except Exception as e:
+        logger.warning(f"Quiz generation failed for task {task_id} day {day}: {e}")
+        quiz_data = []
+
+    # Delete loading message
+    try:
+        await _application.bot.delete_message(chat_id=user_id, message_id=loading_msg.message_id)
+    except Exception:
+        pass
+
+    if not quiz_data:
+        await _application.bot.send_message(
+            chat_id=user_id, text="⚠️ Could not generate quiz. Please try again later."
+        )
+        return
+
+    # Send quiz polls
+    for q in quiz_data:
+        try:
+            options = q.get("options", [])
+            correct = q.get("correct", 0)
+            if len(options) < 2 or correct >= len(options):
+                continue
+            await _application.bot.send_poll(
+                chat_id=user_id,
+                question=q["question"][:300],
+                options=[o[:100] for o in options],
+                type="quiz",
+                correct_option_id=correct,
+                explanation=q.get("explanation", "")[:200],
+                is_anonymous=False,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send quiz poll: {e}")
 
 
 # --- Task Continuation Handlers ---

@@ -62,7 +62,7 @@ from handlers.tasks import (
     back_to_days_handler, handle_task_time, handle_day_toggle,
     handle_task_interval, back_to_time_handler, handle_task_plan_approval,
     list_tasks, view_task_handler, delete_task_handler,
-    set_scheduler, schedule_task_job, retry_task_handler,
+    set_scheduler, schedule_task_job, retry_task_handler, quiz_task_handler,
     continue_task_focus_handler, continue_task_skip_handler,
     continue_task_cancel_handler, continue_task_days_handler,
 )
@@ -532,6 +532,7 @@ def main() -> None:
 
     # Task retry handler — outside ConversationHandler so it works from background task messages
     application.add_handler(CallbackQueryHandler(retry_task_handler, pattern="^TASK_RETRY#"), group=1)
+    application.add_handler(CallbackQueryHandler(quiz_task_handler, pattern="^TASK_QUIZ#"), group=1)
 
     # Inline mode handler (outside ConversationHandler)
     application.add_handler(InlineQueryHandler(inline_query_handler))

@@ -548,6 +548,165 @@ async def update_task_last_lesson_text(pool: DatabasePool, task_id: int, text: s
     )
 
 
+@migration
+async def m033_task_streaks_and_pause(conn):
+    """v33: Add streak tracking and pause support to tasks."""
+    for col in (
+        "current_streak INTEGER DEFAULT 0",
+        "last_engagement_date TEXT",
+        "last_delivery_date TEXT",
+        "paused_at TEXT",
+    ):
+        try:
+            await conn.execute(f"ALTER TABLE tasks ADD COLUMN {col}")
+        except Exception:
+            pass
+
+
+@migration
+async def m034_quiz_results(conn):
+    """v34: Create quiz_results and poll_task_map tables."""
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS quiz_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            day INTEGER NOT NULL,
+            question_index INTEGER NOT NULL,
+            user_selected INTEGER,
+            correct_option INTEGER NOT NULL,
+            is_correct INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_quiz_results_task ON quiz_results(task_id);")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_quiz_results_user ON quiz_results(user_id);")
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS poll_task_map (
+            poll_id TEXT PRIMARY KEY,
+            task_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            day INTEGER NOT NULL,
+            question_index INTEGER NOT NULL,
+            correct_option INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
+# --- Streak & Engagement Helpers ---
+
+
+async def update_task_streak(pool: DatabasePool, task_id: int, streak: int, engagement_date: str):
+    """Update streak count and last engagement date for a task."""
+    await pool.execute(
+        "UPDATE tasks SET current_streak=?, last_engagement_date=? WHERE id=?",
+        (streak, engagement_date, task_id),
+    )
+
+
+async def update_task_delivery_date(pool: DatabasePool, task_id: int, date: str):
+    """Record when a lesson was last delivered."""
+    await pool.execute(
+        "UPDATE tasks SET last_delivery_date=? WHERE id=?", (date, task_id)
+    )
+
+
+# --- Pause / Resume Helpers ---
+
+
+async def pause_task(pool: DatabasePool, task_id: int):
+    """Pause a task: set status to 'paused' and record pause date."""
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    await pool.execute(
+        "UPDATE tasks SET status='paused', paused_at=? WHERE id=?", (today, task_id)
+    )
+
+
+async def resume_task(pool: DatabasePool, task_id: int):
+    """Resume a paused task: restore active status, clear pause and delivery date."""
+    await pool.execute(
+        "UPDATE tasks SET status='active', paused_at=NULL, last_delivery_date=NULL WHERE id=?",
+        (task_id,),
+    )
+
+
+# --- Poll / Quiz Helpers ---
+
+
+async def store_poll_task_map(pool: DatabasePool, poll_id: str, task_id: int, user_id: int,
+                              day: int, question_index: int, correct_option: int):
+    """Map a Telegram poll_id to task context for answer tracking."""
+    await pool.execute(
+        "INSERT OR REPLACE INTO poll_task_map (poll_id, task_id, user_id, day, question_index, correct_option) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (poll_id, task_id, user_id, day, question_index, correct_option),
+    )
+
+
+async def get_poll_task_map(pool: DatabasePool, poll_id: str):
+    """Look up task context for a Telegram poll."""
+    row = await pool.execute_fetch_one(
+        "SELECT poll_id, task_id, user_id, day, question_index, correct_option FROM poll_task_map WHERE poll_id=?",
+        (poll_id,),
+    )
+    return dict(row) if row else None
+
+
+async def delete_poll_task_map(pool: DatabasePool, poll_id: str):
+    """Remove a processed poll mapping."""
+    await pool.execute("DELETE FROM poll_task_map WHERE poll_id=?", (poll_id,))
+
+
+async def store_quiz_result(pool: DatabasePool, task_id: int, user_id: int, day: int,
+                            question_index: int, user_selected: int, correct_option: int,
+                            is_correct: int):
+    """Store a single quiz answer result."""
+    await pool.execute(
+        "INSERT INTO quiz_results (task_id, user_id, day, question_index, user_selected, correct_option, is_correct) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (task_id, user_id, day, question_index, user_selected, correct_option, is_correct),
+    )
+
+
+async def get_quiz_stats(pool: DatabasePool, task_id: int):
+    """Get aggregated quiz stats for a task: {total, correct}."""
+    row = await pool.execute_fetch_one(
+        "SELECT COUNT(*) as total, SUM(is_correct) as correct FROM quiz_results WHERE task_id=?",
+        (task_id,),
+    )
+    if row:
+        return {"total": row["total"] or 0, "correct": row["correct"] or 0}
+    return {"total": 0, "correct": 0}
+
+
+# --- Task Queries (paused-aware) ---
+
+
+async def get_user_tasks_with_paused(pool: DatabasePool, user_id):
+    """Retrieve active and paused tasks for a user (for UI display)."""
+    rows = await pool.execute_fetch_all(
+        "SELECT id, prompt, run_time, interval, plan_json, start_date, hashtag, last_delivered_day, status "
+        "FROM tasks WHERE user_id=? AND status IN ('active', 'paused')",
+        (user_id,),
+    )
+    return [
+        {
+            "id": row["id"],
+            "prompt": row["prompt"],
+            "run_time": row["run_time"],
+            "interval": row["interval"],
+            "plan_json": row["plan_json"],
+            "start_date": row["start_date"],
+            "hashtag": row["hashtag"],
+            "last_delivered_day": row["last_delivered_day"] or 0,
+            "status": row["status"],
+        }
+        for row in rows
+    ]
+
+
 async def _get_schema_version(conn) -> int:
     """Get current schema version, creating the tracking table if needed."""
     await conn.execute("""
@@ -795,7 +954,10 @@ async def mark_task_completed(pool: DatabasePool, task_id: int):
 async def get_task_by_id(pool: DatabasePool, task_id: int):
     """Retrieve a single task by its ID."""
     row = await pool.execute_fetch_one(
-        "SELECT id, user_id, prompt, run_time, interval, plan_json, start_date, hashtag, last_delivered_day, parent_task_id, status, last_lesson_text FROM tasks WHERE id=?",
+        "SELECT id, user_id, prompt, run_time, interval, plan_json, start_date, hashtag, "
+        "last_delivered_day, parent_task_id, status, last_lesson_text, "
+        "current_streak, last_engagement_date, last_delivery_date, paused_at "
+        "FROM tasks WHERE id=?",
         (task_id,),
     )
     if row:
@@ -812,6 +974,10 @@ async def get_task_by_id(pool: DatabasePool, task_id: int):
             "parent_task_id": row["parent_task_id"],
             "status": row["status"],
             "last_lesson_text": row["last_lesson_text"],
+            "current_streak": row["current_streak"] or 0,
+            "last_engagement_date": row["last_engagement_date"],
+            "last_delivery_date": row["last_delivery_date"],
+            "paused_at": row["paused_at"],
         }
     return None
 

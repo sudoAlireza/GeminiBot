@@ -22,6 +22,10 @@ from database.database import (
     create_task, get_user_tasks, get_user, get_user_task_hashtags,
     delete_task_by_hashtag, mark_task_completed, _generate_hashtag, record_token_usage,
     get_task_by_id, update_task_last_delivered_day, update_task_last_lesson_text,
+    update_task_streak, update_task_delivery_date,
+    pause_task, resume_task, get_user_tasks_with_paused,
+    store_poll_task_map, get_poll_task_map, delete_poll_task_map,
+    store_quiz_result, get_quiz_stats,
 )
 from helpers.helpers import strip_markdown, split_message
 
@@ -36,6 +40,18 @@ def set_scheduler(scheduler, application):
     global _scheduler, _application
     _scheduler = scheduler
     _application = application
+
+
+async def _update_streak(pool, task_id: int):
+    """Increment engagement streak for a task (idempotent per day)."""
+    task = await get_task_by_id(pool, task_id)
+    if not task:
+        return
+    today = datetime.now().strftime("%Y-%m-%d")
+    if task.get("last_engagement_date") == today:
+        return  # Already engaged today
+    new_streak = (task.get("current_streak") or 0) + 1
+    await update_task_streak(pool, task_id, new_streak, today)
 
 
 _ALL_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -477,7 +493,7 @@ async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.answer()
 
     pool = _get_pool(context)
-    tasks = await get_user_tasks(pool, update.effective_user.id)
+    tasks = await get_user_tasks_with_paused(pool, update.effective_user.id)
     if not tasks:
         await query.edit_message_text(_("No tasks."), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_("🔙 Back to Tasks Menu"), callback_data="Tasks_Menu")]]))
         return TASKS_MENU
@@ -486,8 +502,9 @@ async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = []
     for t in tasks:
         tag = t.get('hashtag') or f"#Task{t['id']}"
-        text += f"{tag} | {t['run_time']} | {_format_interval(t['interval'])}\n"
-        keyboard.append([InlineKeyboardButton(f"📋 {tag}", callback_data=f"TASK_VIEW#{tag}")])
+        icon = "⏸" if t.get("status") == "paused" else "📋"
+        text += f"{icon} {tag} | {t['run_time']} | {_format_interval(t['interval'])}\n"
+        keyboard.append([InlineKeyboardButton(f"{icon} {tag}", callback_data=f"TASK_VIEW#{tag}")])
 
     keyboard.append([InlineKeyboardButton(_("🔙 Back to Tasks Menu"), callback_data="Tasks_Menu")])
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -504,7 +521,7 @@ async def view_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return TASKS_MENU
 
     pool = _get_pool(context)
-    tasks = await get_user_tasks(pool, update.effective_user.id)
+    tasks = await get_user_tasks_with_paused(pool, update.effective_user.id)
     task = next((t for t in tasks if (t.get('hashtag') or f"#Task{t['id']}") == hashtag), None)
 
     if not task:
@@ -512,16 +529,31 @@ async def view_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return TASKS_MENU
 
     tag = task.get('hashtag') or f"#Task{task['id']}"
-    keyboard = [
+    keyboard = []
+    if task.get("status") == "paused":
+        keyboard.append([InlineKeyboardButton(_("▶️ Resume Task"), callback_data=f"TASK_RESUME#{tag}")])
+    else:
+        keyboard.append([InlineKeyboardButton(_("⏸ Pause Task"), callback_data=f"TASK_PAUSE#{tag}")])
+    keyboard.extend([
         [InlineKeyboardButton(_("🗑 Delete Task"), callback_data=f"TASK_DELETE#{tag}")],
         [InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")],
-    ]
+    ])
+
+    # Build stats footer (quiz scores, progress)
+    stats_lines = []
+    if task.get("status") == "paused":
+        stats_lines.append("⏸ *Paused*")
+    quiz_stats = await get_quiz_stats(pool, task["id"])
+    if quiz_stats["total"] > 0:
+        score_pct = round(quiz_stats["correct"] / quiz_stats["total"] * 100)
+        stats_lines.append(f"🧩 Quiz: {quiz_stats['correct']}/{quiz_stats['total']} ({score_pct}%)")
+    stats_footer = "\n" + "\n".join(stats_lines) if stats_lines else ""
 
     plan_json = task.get('plan_json')
     if plan_json:
         try:
             plan = json.loads(plan_json)
-            text = _build_plan_text(plan, task['prompt'], task['run_time'], task['interval'], tag)
+            text = _build_plan_text(plan, task['prompt'], task['run_time'], task['interval'], tag) + stats_footer
             try:
                 await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN)
             except BadRequest:
@@ -531,7 +563,7 @@ async def view_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             pass
 
     # Fallback if no plan or parse error
-    text = f"{tag}\n📝 _{task['prompt'][:100]}_\n⏰ {task['run_time']} | 🔄 {_format_interval(task['interval'])}"
+    text = f"{tag}\n📝 _{task['prompt'][:100]}_\n⏰ {task['run_time']} | 🔄 {_format_interval(task['interval'])}" + stats_footer
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     return TASKS_MENU
 
@@ -553,6 +585,72 @@ async def delete_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 logger.warning(f"Failed to remove scheduler job: {e}")
         await query.edit_message_text(_("Task deleted."), reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")]]))
+    return TASKS_MENU
+
+
+@restricted
+async def pause_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Pause a task: stop deliveries but preserve streak."""
+    query = update.callback_query
+    await query.answer()
+    hashtag = _safe_callback_data(query.data)
+    if hashtag is None:
+        return TASKS_MENU
+
+    pool = _get_pool(context)
+    tasks = await get_user_tasks_with_paused(pool, update.effective_user.id)
+    task = next((t for t in tasks if (t.get('hashtag') or f"#Task{t['id']}") == hashtag), None)
+    if not task:
+        await query.edit_message_text(_("Task not found."), reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")]]))
+        return TASKS_MENU
+
+    task_id = task["id"]
+    await pause_task(pool, task_id)
+
+    if _scheduler:
+        try:
+            _scheduler.remove_job(str(task_id))
+        except Exception:
+            pass
+
+    await query.edit_message_text(
+        f"⏸ Task {hashtag} paused.\nYour streak will be preserved. Resume anytime.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")]]),
+    )
+    return TASKS_MENU
+
+
+@restricted
+async def resume_task_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Resume a paused task: restart deliveries from where it left off."""
+    query = update.callback_query
+    await query.answer()
+    hashtag = _safe_callback_data(query.data)
+    if hashtag is None:
+        return TASKS_MENU
+
+    pool = _get_pool(context)
+    tasks = await get_user_tasks_with_paused(pool, update.effective_user.id)
+    task = next((t for t in tasks if (t.get('hashtag') or f"#Task{t['id']}") == hashtag), None)
+    if not task:
+        await query.edit_message_text(_("Task not found."), reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")]]))
+        return TASKS_MENU
+
+    task_id = task["id"]
+    await resume_task(pool, task_id)
+
+    schedule_task_job(
+        task_id, update.effective_user.id, task["prompt"], task["run_time"],
+        task["interval"], task.get("plan_json"), task.get("start_date"), hashtag,
+    )
+
+    next_day = task.get("last_delivered_day", 0) + 1
+    await query.edit_message_text(
+        f"▶️ Task {hashtag} resumed!\nDeliveries continue from Day {next_day}.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(_("🔙 Back to List"), callback_data="Tasks_List")]]),
+    )
     return TASKS_MENU
 
 
@@ -708,10 +806,14 @@ async def _send_task_result(task_id, user_id, prompt, response, chat, days_passe
             cached_tokens=response.usage.get("cached_tokens", 0),
             thinking_tokens=response.usage.get("thinking_tokens", 0),
         )
+    # Load streak for header display
+    task_data = await get_task_by_id(pool, task_id) if pool else None
+    streak = task_data.get("current_streak", 0) if task_data else 0
+    streak_text = f" | 🔥 {streak}" if streak > 0 else ""
     if days_passed and plan_total:
-        header = f"📬 *Day {days_passed}/{plan_total}* {task_hashtag}\n_{prompt[:50]}_\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        header = f"📬 *Day {days_passed}/{plan_total}* {task_hashtag}{streak_text}\n_{prompt[:50]}_\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     else:
-        header = f"📬 {task_hashtag}\n_{prompt[:50]}_\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        header = f"📬 {task_hashtag}{streak_text}\n_{prompt[:50]}_\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     parts = split_message(header + response.text)
 
     # Build buttons for the last message part
@@ -799,7 +901,51 @@ async def _run_task_delivery(task_id, user_id, prompt, plan_json, task_hashtag, 
         await update_task_last_delivered_day(pool, task_id, current_day)
         await update_task_last_lesson_text(pool, task_id, response.text)
 
+    # Streak: check if user missed engagement on previous delivery, then record today
+    task_fresh = await get_task_by_id(pool, task_id)
+    if task_fresh:
+        last_delivery = task_fresh.get("last_delivery_date")
+        last_engagement = task_fresh.get("last_engagement_date")
+        if last_delivery and (not last_engagement or last_engagement < last_delivery):
+            await update_task_streak(pool, task_id, 0, last_engagement)
+        today = datetime.now().strftime("%Y-%m-%d")
+        await update_task_delivery_date(pool, task_id, today)
+
     await _send_task_result(task_id, user_id, prompt, response, chat, current_day, plan_total, task_hashtag, pool)
+
+    # Milestone celebration at 25%, 50%, 75%
+    if current_day and plan_total and plan_total >= 4:
+        milestones = {
+            plan_total // 4: ("25%", "Great start! 🌱"),
+            plan_total // 2: ("50%", "Halfway there! 💪"),
+            3 * plan_total // 4: ("75%", "Almost done! 🚀"),
+        }
+        milestones.pop(0, None)  # avoid 0 for very short plans
+        if current_day in milestones:
+            pct_label, encouragement = milestones[current_day]
+            task_now = await get_task_by_id(pool, task_id)
+            streak = task_now.get("current_streak", 0) if task_now else 0
+            streak_line = f"\n🔥 Current streak: {streak} days" if streak > 0 else ""
+            quiz_stats = await get_quiz_stats(pool, task_id)
+            quiz_line = ""
+            if quiz_stats["total"] > 0:
+                score_pct = round(quiz_stats["correct"] / quiz_stats["total"] * 100)
+                quiz_line = f"\n🧩 Quiz score: {quiz_stats['correct']}/{quiz_stats['total']} ({score_pct}%)"
+            milestone_text = (
+                f"🏁 *Milestone: {pct_label} Complete!* {task_hashtag}\n\n"
+                f"📅 Days completed: {current_day}/{plan_total}"
+                f"{streak_line}{quiz_line}\n\n"
+                f"{encouragement}"
+            )
+            try:
+                await _application.bot.send_message(
+                    chat_id=user_id, text=milestone_text, parse_mode=ParseMode.MARKDOWN,
+                )
+            except BadRequest:
+                await _application.bot.send_message(
+                    chat_id=user_id, text=strip_markdown(milestone_text),
+                )
+
     return True
 
 
@@ -1037,14 +1183,14 @@ async def quiz_task_handler(update, context):
         )
         return
 
-    # Send quiz polls
-    for q in quiz_data:
+    # Send quiz polls and store poll-to-task mapping for answer tracking
+    for qi, q in enumerate(quiz_data):
         try:
             options = q.get("options", [])
             correct = q.get("correct", 0)
             if len(options) < 2 or correct >= len(options):
                 continue
-            await _application.bot.send_poll(
+            msg = await _application.bot.send_poll(
                 chat_id=user_id,
                 question=q["question"][:300],
                 options=[o[:100] for o in options],
@@ -1053,8 +1199,45 @@ async def quiz_task_handler(update, context):
                 explanation=q.get("explanation", "")[:200],
                 is_anonymous=False,
             )
+            if msg and msg.poll:
+                await store_poll_task_map(pool, msg.poll.id, task_id, user_id, day, qi, correct)
         except Exception as e:
             logger.warning(f"Failed to send quiz poll: {e}")
+
+
+# --- Poll Answer Handler ---
+
+
+async def poll_answer_handler(update, context):
+    """Handle quiz poll answers from Telegram PollAnswer updates."""
+    answer = update.poll_answer
+    if not answer or not answer.option_ids:
+        return
+
+    poll_id = answer.poll_id
+    user_id = answer.user.id
+    selected = answer.option_ids[0]
+
+    pool = context.bot_data.get("db_pool") if context.bot_data else None
+    if not pool:
+        return
+
+    mapping = await get_poll_task_map(pool, poll_id)
+    if not mapping:
+        return
+
+    task_id = mapping["task_id"]
+    is_correct = 1 if selected == mapping["correct_option"] else 0
+
+    await store_quiz_result(
+        pool, task_id, user_id, mapping["day"],
+        mapping["question_index"], selected, mapping["correct_option"], is_correct,
+    )
+
+    # Update streak (user engaged by taking quiz)
+    await _update_streak(pool, task_id)
+
+    await delete_poll_task_map(pool, poll_id)
 
 
 # --- Task Continuation Handlers ---

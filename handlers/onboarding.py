@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -29,6 +30,7 @@ from database.database import (
     create_conversation,
     get_task_by_id,
     add_conversation_tag,
+    update_task_streak,
 )
 from helpers.helpers import strip_markdown
 
@@ -103,6 +105,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 plan = json.loads(task["plan_json"]) if task.get("plan_json") else []
                 day_item = next((item for item in plan if item["day"] == dl_day_num), None)
                 if day_item:
+                    # Update engagement streak
+                    try:
+                        today = datetime.now().strftime("%Y-%m-%d")
+                        if task.get("last_engagement_date") != today:
+                            new_streak = (task.get("current_streak") or 0) + 1
+                            await update_task_streak(pool, dl_task_id, new_streak, today)
+                    except Exception as e:
+                        logger.warning(f"Failed to update streak on discuss: {e}")
                     lesson_context = ""
                     last_lesson = task.get("last_lesson_text")
                     if last_lesson and task.get("last_delivered_day") == dl_day_num:

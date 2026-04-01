@@ -11,6 +11,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     MessageHandler,
     InlineQueryHandler,
+    PollAnswerHandler,
     filters,
     ConversationHandler,
 )
@@ -63,6 +64,7 @@ from handlers.tasks import (
     handle_task_interval, back_to_time_handler, handle_task_plan_approval,
     list_tasks, view_task_handler, delete_task_handler,
     set_scheduler, schedule_task_job, retry_task_handler, quiz_task_handler,
+    poll_answer_handler, pause_task_handler, resume_task_handler,
     continue_task_focus_handler, continue_task_skip_handler,
     continue_task_cancel_handler, continue_task_days_handler,
 )
@@ -266,6 +268,8 @@ def states():
             CallbackQueryHandler(list_tasks, pattern="^Tasks_List$"),
             CallbackQueryHandler(view_task_handler, pattern="^TASK_VIEW#"),
             CallbackQueryHandler(delete_task_handler, pattern="^TASK_DELETE#"),
+            CallbackQueryHandler(pause_task_handler, pattern="^TASK_PAUSE#"),
+            CallbackQueryHandler(resume_task_handler, pattern="^TASK_RESUME#"),
             CallbackQueryHandler(open_tasks_menu, pattern="^Tasks_Menu$"),
             CallbackQueryHandler(start_over, pattern="^Start_Again"),
         ],
@@ -533,6 +537,7 @@ def main() -> None:
     # Task retry handler — outside ConversationHandler so it works from background task messages
     application.add_handler(CallbackQueryHandler(retry_task_handler, pattern="^TASK_RETRY#"), group=1)
     application.add_handler(CallbackQueryHandler(quiz_task_handler, pattern="^TASK_QUIZ#"), group=1)
+    application.add_handler(PollAnswerHandler(poll_answer_handler), group=1)
 
     # Inline mode handler (outside ConversationHandler)
     application.add_handler(InlineQueryHandler(inline_query_handler))

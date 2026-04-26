@@ -59,6 +59,10 @@ KNOWN_ENDPOINTS = {
         "base_url": "https://api.together.xyz/v1",
         "display_name": "Together AI",
     },
+    "nvidia": {
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "display_name": "NVIDIA NIM",
+    },
 }
 
 

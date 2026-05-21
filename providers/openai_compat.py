@@ -63,6 +63,10 @@ KNOWN_ENDPOINTS = {
         "base_url": "https://integrate.api.nvidia.com/v1",
         "display_name": "NVIDIA NIM",
     },
+    "orcarouter": {
+        "base_url": "https://api.orcarouter.ai/v1",
+        "display_name": "OrcaRouter",
+    }
 }
 
 

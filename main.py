@@ -157,6 +157,10 @@ def _register_providers():
     except ImportError:
         logger.info("Anthropic provider not available (anthropic package not installed)")
 
+    # Cloudflare Workers AI (native REST API)
+    from providers.cloudflare_workers_ai import CloudflareWorkersAIProvider
+    registry.register(CloudflareWorkersAIProvider())
+
     # Pre-configured OpenAI-compatible endpoints
     try:
         from providers.openai_compat import OpenAICompatProvider, KNOWN_ENDPOINTS

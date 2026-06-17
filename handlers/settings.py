@@ -146,6 +146,15 @@ async def update_api_key_handler(update: Update, context: ContextTypes.DEFAULT_T
             "4. Copy the key (it starts with sk-ant-)\n\n"
             "Please paste your new API Key below:"
         ),
+        "cloudflare": (
+            "\U0001f511 Update API Key (Cloudflare Workers AI)\n\n"
+            "How to get your credentials:\n"
+            "1. Go to the Workers AI page in the Cloudflare dashboard\n"
+            "2. Select \"Use REST API\"\n"
+            "3. Create a Workers AI API Token\n"
+            "4. Copy your Account ID and API Token\n\n"
+            "Paste them as ACCOUNT_ID:API_TOKEN below:"
+        ),
     }
 
     text = provider_instructions.get(provider_name, (
@@ -199,7 +208,7 @@ async def open_provider_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Use display name from registry if available, otherwise from custom providers
         provider_obj = registry.get(name)
         if provider_obj:
-            display = name.title()
+            display = getattr(provider_obj, "display_name", None) or name.title()
         elif name in custom_names:
             cp = next(c for c in custom_providers if c["name"] == name)
             display = cp.get("display_name") or name.title()

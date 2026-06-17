@@ -2,11 +2,11 @@
 
 ## Introduction
 
-AnyAIChat is a full-featured multi-provider AI Telegram bot that supports **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch between providers, bring their own API keys, and take advantage of features like streaming, vision, knowledge base with RAG, task scheduling, and more.
+AnyAIChat is a full-featured multi-provider AI Telegram bot that supports **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch between providers, bring their own API keys, and take advantage of features like streaming, vision, knowledge base with RAG, task scheduling, and more.
 
 ## Features
 
-- **Multi-provider AI** — Gemini, OpenAI, Anthropic, and OpenAI-compatible endpoints
+- **Multi-provider AI** — Gemini, OpenAI, Anthropic, Cloudflare Workers AI, and OpenAI-compatible endpoints
 - Streaming responses with real-time updates
 - Vision / image analysis and image generation
 - Knowledge base with RAG (Retrieval-Augmented Generation)
@@ -30,6 +30,7 @@ AnyAIChat is a full-featured multi-provider AI Telegram bot that supports **Goog
 │   ├── gemini.py            # Google Gemini provider
 │   ├── openai_provider.py   # OpenAI provider
 │   ├── anthropic_provider.py # Anthropic (Claude) provider
+│   ├── cloudflare_workers_ai.py # Cloudflare Workers AI provider
 │   └── openai_compat.py     # OpenAI-compatible endpoints
 ├── chat/                    # Provider-agnostic chat session layer
 │   ├── session.py           # ChatSession abstraction
@@ -67,6 +68,7 @@ The bot uses an async SQLite database (via `aiosqlite`) with an automatic migrat
   - [Gemini API key](https://makersuite.google.com/app/apikey) from Google AI Studio
   - [OpenAI API key](https://platform.openai.com/api-keys)
   - [Anthropic API key](https://console.anthropic.com/)
+  - [Cloudflare Workers AI API token](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)
 - Your Telegram account ID from [Show Json Bot](https://t.me/ShowJsonBot) (different from your username — used for access control)
 
 ## Environment Variables
@@ -85,6 +87,7 @@ The bot uses an async SQLite database (via `aiosqlite`) with an automatic migrat
 | `GEMINI_API_TOKEN` | Google Gemini API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic (Claude) API key |
+| `CLOUDFLARE_ACCOUNT_ID` | Optional server-wide Cloudflare account ID for Workers AI token-only input |
 | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `GROQ_API_KEY` | Groq API key |
 
@@ -130,6 +133,7 @@ The bot uses an async SQLite database (via `aiosqlite`) with an automatic migrat
    export GEMINI_API_TOKEN=<Your Gemini API key>
    # export OPENAI_API_KEY=<Your OpenAI API key>
    # export ANTHROPIC_API_KEY=<Your Anthropic API key>
+   # export CLOUDFLARE_ACCOUNT_ID=<Your Cloudflare Account ID>
 
    # Optional: enable encrypted API key storage
    # export ENCRYPTION_KEY=<a random secret string>

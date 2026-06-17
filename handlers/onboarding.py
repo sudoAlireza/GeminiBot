@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime
@@ -33,6 +34,7 @@ from database.database import (
     update_task_streak,
 )
 from helpers.helpers import strip_markdown
+from providers.key_formats import is_valid_gemini_key_format
 
 logger = logging.getLogger(__name__)
 
@@ -250,19 +252,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 @restricted
 async def handle_api_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Save the user's API key after provider-specific validation."""
-    api_key = update.message.text.strip()
+    raw_api_key = update.message.text.strip()
+    api_key = raw_api_key
     user_id = update.effective_user.id
-
-    # Strip control characters
-    api_key = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", api_key)
 
     provider_name = context.user_data.get("active_provider", "gemini")
 
+    if provider_name == "cloudflare":
+        from providers.cloudflare_workers_ai import (
+            CloudflareCredentialError,
+            normalize_cloudflare_credentials,
+        )
+        try:
+            api_key = normalize_cloudflare_credentials(raw_api_key)
+        except CloudflareCredentialError:
+            await update.message.reply_text(_(
+                "Invalid Cloudflare credentials. Paste them as ACCOUNT_ID:API_TOKEN and try again:"
+            ))
+            return API_KEY_INPUT
+        if ":" not in api_key and not os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip():
+            await update.message.reply_text(_(
+                "Cloudflare Workers AI requires an Account ID. Paste credentials as ACCOUNT_ID:API_TOKEN and try again:"
+            ))
+            return API_KEY_INPUT
+    else:
+        # Strip control characters
+        api_key = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", api_key)
+
     # Provider-specific key format validation
     if provider_name == "gemini":
-        if not re.match(r"^AIza[A-Za-z0-9_-]{35,}$", api_key):
+        if not is_valid_gemini_key_format(api_key):
             await update.message.reply_text(_(
-                "Invalid API key format. Gemini API keys start with 'AIza'. Please try again:"
+                "Invalid API key format. Gemini API keys start with 'AIza' or 'AQ.'. Please try again:"
             ))
             return API_KEY_INPUT
     elif provider_name == "openai":

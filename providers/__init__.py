@@ -16,6 +16,7 @@ from providers.base import (
     InsufficientQuotaError,
 )
 from providers.registry import ProviderRegistry
+from providers.cloudflare_workers_ai import CloudflareWorkersAIProvider
 
 __all__ = [
     "Capability",
@@ -34,4 +35,5 @@ __all__ = [
     "ServiceUnavailableError",
     "InsufficientQuotaError",
     "ProviderRegistry",
+    "CloudflareWorkersAIProvider",
 ]

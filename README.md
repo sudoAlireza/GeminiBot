@@ -2,7 +2,7 @@
 
 > **Note:** This project has been rebranded from GeminiBot to AnyAIChat to better reflect its multi-provider capabilities. The bot now supports any major AI provider, not just Google Gemini.
 
-AnyAIChat is a feature-rich Telegram bot that supports multiple AI providers including **Google Gemini**, **OpenAI**, **Anthropic (Claude)**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch providers, bring their own API keys, and enjoy advanced features like streaming responses, vision, knowledge base with RAG, task scheduling, and more.
+AnyAIChat is a feature-rich Telegram bot that supports multiple AI providers including **Google Gemini**, **OpenAI**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch providers, bring their own API keys, and enjoy advanced features like streaming responses, vision, knowledge base with RAG, task scheduling, and more.
 
 [Set-up Tutorial on Medium](https://medium.com/@alirezafathi/how-to-use-google-gemini-ai-in-your-personal-telegram-bot-on-your-own-server-b1f0b9de2bdd)
 
@@ -16,6 +16,7 @@ AnyAIChat is a feature-rich Telegram bot that supports multiple AI providers inc
   - [Gemini API key](https://makersuite.google.com/app/apikey)
   - [OpenAI API key](https://platform.openai.com/api-keys)
   - [Anthropic API key](https://console.anthropic.com/)
+  - [Cloudflare Workers AI API token](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)
 - Your Telegram account ID from [Show Json Bot](https://t.me/ShowJsonBot) (used for access control)
 
 ### Installation
@@ -58,6 +59,7 @@ The bot is configured using environment variables:
 | `GEMINI_API_TOKEN` | Google Gemini API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `ANTHROPIC_API_KEY` | Anthropic (Claude) API key | — |
+| `CLOUDFLARE_ACCOUNT_ID` | Optional server-wide Cloudflare account ID for Workers AI token-only input | — |
 | `OPENROUTER_API_KEY` | OpenRouter API key | — |
 | `GROQ_API_KEY` | Groq API key | — |
 
@@ -103,9 +105,10 @@ docker-compose down        # Stop the bot
 - **Google Gemini** — text, vision, image generation, code execution, web search, thinking modes, context caching
 - **OpenAI (GPT)** — text, vision, image generation (DALL-E), web search, reasoning models (o1/o3/o4)
 - **Anthropic (Claude)** — text, vision, extended thinking with configurable budgets
+- **Cloudflare Workers AI** — native REST API integration for Cloudflare-hosted text generation models
 - **OpenAI-compatible** — OpenRouter, Groq, Together AI, or custom endpoints
 - Switch providers and models on the fly from the settings menu
-- Bring Your Own Key (BYOK) — users can set their own API keys per provider
+- Bring Your Own Key (BYOK) — users can set their own API keys per provider. For Cloudflare Workers AI, paste credentials as `ACCOUNT_ID:API_TOKEN`, or set `CLOUDFLARE_ACCOUNT_ID` and paste only the token.
 
 ### Conversation Management
 - Streaming responses with real-time updates
@@ -162,6 +165,7 @@ docker-compose down        # Stop the bot
 │   ├── gemini.py            # Google Gemini provider
 │   ├── openai_provider.py   # OpenAI provider
 │   ├── anthropic_provider.py # Anthropic (Claude) provider
+│   ├── cloudflare_workers_ai.py # Cloudflare Workers AI provider
 │   └── openai_compat.py     # OpenAI-compatible endpoints
 ├── chat/                    # Provider-agnostic chat layer
 │   ├── session.py           # ChatSession abstraction

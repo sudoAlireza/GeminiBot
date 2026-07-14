@@ -2,7 +2,7 @@
 
 > **Note:** This project has been rebranded from GeminiBot to AnyAIChat to better reflect its multi-provider capabilities. The bot now supports any major AI provider, not just Google Gemini.
 
-AnyAIChat is a feature-rich Telegram bot that supports multiple AI providers including **Google Gemini**, **OpenAI**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch providers, bring their own API keys, and enjoy advanced features like streaming responses, vision, knowledge base with RAG, task scheduling, and more.
+AnyAIChat is a feature-rich Telegram bot that supports multiple AI providers including **Google Gemini**, **OpenAI**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI, ZenMux). Users can switch providers, bring their own API keys, and enjoy advanced features like streaming responses, vision, knowledge base with RAG, task scheduling, and more.
 
 [Set-up Tutorial on Medium](https://medium.com/@alirezafathi/how-to-use-google-gemini-ai-in-your-personal-telegram-bot-on-your-own-server-b1f0b9de2bdd)
 
@@ -106,7 +106,7 @@ docker-compose down        # Stop the bot
 - **OpenAI (GPT)** — text, vision, image generation (DALL-E), web search, reasoning models (o1/o3/o4)
 - **Anthropic (Claude)** — text, vision, extended thinking with configurable budgets
 - **Cloudflare Workers AI** — native REST API integration for Cloudflare-hosted text generation models
-- **OpenAI-compatible** — OpenRouter, Groq, Together AI, or custom endpoints
+- **OpenAI-compatible** — OpenRouter, Groq, Together AI, ZenMux, or custom endpoints
 - Switch providers and models on the fly from the settings menu
 - Bring Your Own Key (BYOK) — users can set their own API keys per provider. For Cloudflare Workers AI, paste credentials as `ACCOUNT_ID:API_TOKEN`, or set `CLOUDFLARE_ACCOUNT_ID` and paste only the token.
 

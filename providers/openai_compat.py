@@ -1,4 +1,4 @@
-"""OpenAI-compatible provider — works with OpenRouter, Groq, Together, and custom endpoints."""
+"""OpenAI-compatible provider for built-in and custom endpoints."""
 
 from __future__ import annotations
 
@@ -66,7 +66,11 @@ KNOWN_ENDPOINTS = {
     "orcarouter": {
         "base_url": "https://api.orcarouter.ai/v1",
         "display_name": "OrcaRouter",
-    }
+    },
+    "zenmux": {
+        "base_url": "https://zenmux.ai/api/v1",
+        "display_name": "ZenMux",
+    },
 }
 
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-AnyAIChat is a full-featured multi-provider AI Telegram bot that supports **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI). Users can switch between providers, bring their own API keys, and take advantage of features like streaming, vision, knowledge base with RAG, task scheduling, and more.
+AnyAIChat is a full-featured multi-provider AI Telegram bot that supports **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Cloudflare Workers AI**, and **OpenAI-compatible endpoints** (OpenRouter, Groq, Together AI, ZenMux). Users can switch between providers, bring their own API keys, and take advantage of features like streaming, vision, knowledge base with RAG, task scheduling, and more.
 
 ## Features
 
